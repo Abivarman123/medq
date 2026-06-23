@@ -13,7 +13,6 @@ import {
   Clock,
   Stethoscope,
   AlertCircle,
-  Database,
   Mail,
   User,
   Phone,
@@ -60,12 +59,16 @@ type Receipt = {
   avgConsult: number;
 };
 
+type SelectedQueue = {
+  doctorId: Id<"doctors">;
+  queueId: Id<"queues">;
+};
+
 export default function CheckInKiosk() {
   const router = useRouter();
   const doctors = useQuery(api.doctors.list);
   const getOrCreateQueue = useMutation(api.queues.getOrCreateQueue);
   const checkIn = useMutation(api.queues.checkIn);
-  const seedDatabase = useMutation(api.seed.seedAll);
   const sendConfirmationEmail = useAction(api.notifications.sendConfirmationEmail);
 
   const todayStr = new Date().toISOString().split("T")[0];
@@ -75,15 +78,11 @@ export default function CheckInKiosk() {
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [patientPhone, setPatientPhone] = useState("");
   const [patientEmail, setPatientEmail] = useState("");
-  const [selectedDoctorId, setSelectedDoctorId] = useState("");
-  const [selectedQueueId, setSelectedQueueId] = useState<Id<"queues"> | null>(
-    null,
-  );
+  const [selectedDoctorId, setSelectedDoctorId] = useState<Id<"doctors"> | "">("");
+  const [selectedQueue, setSelectedQueue] = useState<SelectedQueue | null>(null);
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [isSeeding, setIsSeeding] = useState(false);
-  const [seedToast, setSeedToast] = useState("");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -98,47 +97,40 @@ export default function CheckInKiosk() {
     return doctors.filter((d) => d.departmentName === departmentFilter);
   }, [doctors, departmentFilter]);
 
-  useEffect(() => {
-    if (!selectedDoctorId) {
-      setSelectedQueueId(null);
-      return;
-    }
+  const selectedQueueId =
+    selectedQueue?.doctorId === selectedDoctorId ? selectedQueue.queueId : null;
 
+  useEffect(() => {
+    if (!selectedDoctorId) return;
+    let shouldUpdate = true;
     const loadQueue = async () => {
       try {
         const queueId = await getOrCreateQueue({
-          doctorId: selectedDoctorId as Id<"doctors">,
+          doctorId: selectedDoctorId,
           date: todayStr,
         });
-        setSelectedQueueId(queueId);
+        if (shouldUpdate) {
+          setSelectedQueue({ doctorId: selectedDoctorId, queueId });
+        }
       } catch (err) {
         console.error("Failed to load queue for selected doctor:", err);
-        setSelectedQueueId(null);
+        if (shouldUpdate) {
+          setSelectedQueue(null);
+        }
       }
     };
 
     void loadQueue();
+
+    return () => {
+      shouldUpdate = false;
+    };
   }, [selectedDoctorId, getOrCreateQueue, todayStr]);
 
   const selectedQueueStatus = useQuery(
     api.queues.getQueueStatus,
     selectedQueueId ? { queueId: selectedQueueId } : "skip",
   );
-
-  const handleSeed = async () => {
-    setIsSeeding(true);
-    setSeedToast("");
-    try {
-      const result = await seedDatabase();
-      setSeedToast(result.message);
-    } catch (err) {
-      console.error(err);
-      setSeedToast("Seeding failed.");
-    } finally {
-      setIsSeeding(false);
-      setTimeout(() => setSeedToast(""), 5000);
-    }
-  };
 
   const resetForm = () => {
     setFirstName("");
@@ -147,6 +139,7 @@ export default function CheckInKiosk() {
     setPatientPhone("");
     setPatientEmail("");
     setSelectedDoctorId("");
+    setSelectedQueue(null);
     setDepartmentFilter("all");
   };
 
@@ -235,7 +228,7 @@ export default function CheckInKiosk() {
       const queueId =
         selectedQueueId ??
         (await getOrCreateQueue({
-          doctorId: selectedDoctorId as any,
+          doctorId: selectedDoctorId,
           date: todayStr,
         }));
       const result = await checkIn({
@@ -335,31 +328,9 @@ export default function CheckInKiosk() {
               Outpatient Check-In
             </span>
           </div>
-          <button
-            type="button"
-            onClick={handleSeed}
-            disabled={isSeeding}
-            className="text-xs font-bold text-teal-700 hover:text-teal-900 disabled:opacity-50 cursor-pointer"
-          >
-            {isSeeding ? "Syncing…" : "Sync doctors"}
-          </button>
+          <div className="w-[92px]" aria-hidden />
         </div>
       </header>
-
-      {/* Seed feedback toast */}
-      {seedToast && (
-        <div className="max-w-4xl mx-auto px-4 pt-4 w-full animate-fade-in no-print">
-          <div className="bg-teal-900 text-teal-100 text-xs font-semibold px-4 py-3 rounded-xl flex items-center justify-between gap-4">
-            <span>{seedToast}</span>
-            <button
-              onClick={() => setSeedToast("")}
-              className="text-teal-300 hover:text-white transition font-bold text-base leading-none cursor-pointer"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
 
       <main className="flex-grow max-w-4xl mx-auto px-4 py-8 w-full flex items-center justify-center">
         {receipt ? (
@@ -486,7 +457,7 @@ export default function CheckInKiosk() {
                 </div>
               </div>
 
-              <div className="bg-white p-4 border border-slate-100 rounded-2xl shadow-sm flex flex-col items-center gap-2">
+              <div className="qr-surface bg-white p-4 border border-slate-100 rounded-2xl shadow-sm flex flex-col items-center gap-2">
                 <QRCodeSVG value={trackingUrl} size={140} level="H" />
                 <span className="text-[10px] text-slate-400 font-bold uppercase">
                   Scan for live queue status
@@ -552,18 +523,9 @@ export default function CheckInKiosk() {
                       No physicians on file
                     </h3>
                     <p className="text-xs text-amber-600 mt-1 max-w-sm">
-                      Sync demo clinical records before patients can check in.
+                      Please contact staff before patients can check in.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleSeed}
-                    disabled={isSeeding}
-                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-3 px-5 rounded-xl transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Database className="w-4 h-4" />
-                    {isSeeding ? "Syncing…" : "Sync clinical records"}
-                  </button>
                 </div>
               ) : (
                 <form onSubmit={handleCheckIn} className="flex flex-col gap-8">
@@ -666,6 +628,7 @@ export default function CheckInKiosk() {
                         onChange={(e) => {
                           setDepartmentFilter(e.target.value);
                           setSelectedDoctorId("");
+                          setSelectedQueue(null);
                         }}
                         className={`${inputClass} max-w-xs`}
                       >

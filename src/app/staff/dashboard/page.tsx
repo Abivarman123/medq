@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
-import type { Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
 import {
   ArrowLeft,
@@ -21,6 +21,11 @@ import {
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
+type ActiveQueue = {
+  doctorId: Id<"doctors">;
+  queueId: Id<"queues">;
+};
+
 export default function StaffDashboard() {
   const router = useRouter();
 
@@ -37,8 +42,8 @@ export default function StaffDashboard() {
   const sendEmailAlertAction = useAction(api.notifications.sendQueueAlertEmail);
   const sendCalledEmailAction = useAction(api.notifications.sendCalledEmail);
 
-  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
-  const [activeQueueId, setActiveQueueId] = useState<Id<"queues"> | null>(null);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<Id<"doctors"> | "">("");
+  const [activeQueue, setActiveQueue] = useState<ActiveQueue | null>(null);
   const [isMockSeeding, setIsMockSeeding] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
   const [seedToast, setSeedToast] = useState("");
@@ -56,20 +61,26 @@ export default function StaffDashboard() {
 
   const todayStr = new Date().toISOString().split("T")[0];
   const activeDoctor = doctors?.find((d) => d._id === selectedDoctorId);
+  const activeQueueId =
+    activeQueue?.doctorId === selectedDoctorId ? activeQueue.queueId : null;
 
   useEffect(() => {
-    if (selectedDoctorId) {
-      const loadQueue = async () => {
-        const qId = await getOrCreateQueue({
-          doctorId: selectedDoctorId as Id<"doctors">,
-          date: todayStr,
-        });
-        setActiveQueueId(qId);
-      };
-      void loadQueue();
-    } else {
-      setActiveQueueId(null);
-    }
+    if (!selectedDoctorId) return;
+    let shouldUpdate = true;
+    const loadQueue = async () => {
+      const qId = await getOrCreateQueue({
+        doctorId: selectedDoctorId,
+        date: todayStr,
+      });
+      if (shouldUpdate) {
+        setActiveQueue({ doctorId: selectedDoctorId, queueId: qId });
+      }
+    };
+    void loadQueue();
+
+    return () => {
+      shouldUpdate = false;
+    };
   }, [selectedDoctorId, getOrCreateQueue, todayStr]);
 
   const entries = useQuery(
@@ -105,6 +116,7 @@ export default function StaffDashboard() {
       const result = await clearTodayQueues();
       setSeedToast(result.message);
       setSelectedDoctorId("");
+      setActiveQueue(null);
     } catch (err) {
       console.error(err);
       setSeedToast("Failed to clear queues. Check console for details.");
@@ -230,7 +242,7 @@ export default function StaffDashboard() {
     setNewPatientDate(todayStr);
   };
 
-  const handleCallPatient = async (patient: any) => {
+  const handleCallPatient = async (patient: Doc<"queue_entries">) => {
     await updateStatus({
       entryId: patient._id,
       status: "called",
@@ -357,7 +369,7 @@ export default function StaffDashboard() {
               <div className="flex-1 px-5 pb-5 flex flex-col gap-4 items-center justify-center text-center">
                 <p className="text-xs text-slate-500 leading-normal">
                   No doctors set up yet. Click <strong>Generate Mock Queue</strong> in the header to
-                  seed demo data and populate today's queues in one step.
+                  seed demo data and populate today&apos;s queues in one step.
                 </p>
                 <button
                   onClick={handleMockQueue}

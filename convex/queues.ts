@@ -17,6 +17,14 @@ function generateAppointmentNumber(date: string): string {
   return `APT-${compact}-${suffix}`;
 }
 
+type QueueEntryStatus =
+  | "waiting"
+  | "called"
+  | "arrived"
+  | "in_consultation"
+  | "done"
+  | "skipped";
+
 // Get or create today's queue for a doctor
 export const getOrCreateQueue = mutation({
   args: {
@@ -168,10 +176,7 @@ export const getPatientLiveStatus = query({
     const estimatedWaitMinutesMin = Math.max(0, patientsAhead * doctorAvg);
     const estimatedWaitMinutesMax = Math.max(0, patientsAhead * doctorAvg + 5);
 
-    // 5. Check active queue length
-    const totalWaitingCount = activeEntries.filter((e) => e.status === "waiting").length;
-
-    // 6. Get the currently active patient number/name if any
+    // 5. Get the currently active patient number/name if any
     const activeConsultation = activeEntries.find((e) => e.status === "in_consultation");
     const currentCalling = activeEntries.find((e) => e.status === "called");
 
@@ -291,7 +296,11 @@ export const updateEntryStatus = mutation({
     const entry = await ctx.db.get(args.entryId);
     if (!entry) throw new Error("Entry not found");
 
-    const patchData: any = { status: args.status };
+    const patchData: {
+      status: QueueEntryStatus;
+      calledTime?: number;
+      doneTime?: number;
+    } = { status: args.status };
 
     if (args.status === "called") {
       patchData.calledTime = Date.now();

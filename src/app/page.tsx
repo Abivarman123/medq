@@ -11,7 +11,6 @@ import {
   UserCheck,
   ArrowRight,
   CalendarCheck,
-  Stethoscope,
 } from "lucide-react";
 
 export default function Home() {
@@ -96,7 +95,7 @@ export default function Home() {
               <span className="text-teal-600">not in crowded clinics.</span>
             </h1>
             <p className="text-lg text-slate-1000 max-w-lg leading-relaxed">
-              MedQ tracks your doctor's queue live. Receive free email alerts,
+              MedQ tracks your doctor&apos;s queue live. Receive free email alerts,
               see estimated waiting ranges, and only arrive when the doctor is
               ready for you.
             </p>
@@ -232,7 +231,7 @@ export default function Home() {
                 Get Smart Alerts
               </h3>
               <p className="text-slate-500 text-sm mt-2">
-                Subscribe to free email notifications. You'll get an alert
+                Subscribe to free email notifications. You&apos;ll get an alert
                 directly in your inbox when there are only{" "}
                 <strong>3 patients ahead</strong>.
               </p>

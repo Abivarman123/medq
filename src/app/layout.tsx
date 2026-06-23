@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import ThemeModeToggle from "@/components/ThemeModeToggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,10 +31,20 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-50 text-slate-900">
+      <body
+        className="medq-dark min-h-full flex flex-col bg-slate-50 text-slate-900"
+        suppressHydrationWarning
+      >
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('medq-theme');document.body.classList.toggle('medq-dark',t!=='light')}catch(e){}",
+          }}
+        />
         <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
+        <ThemeModeToggle />
       </body>
     </html>
   );
